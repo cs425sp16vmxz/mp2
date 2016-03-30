@@ -1,0 +1,31 @@
+The format for running this MP is 
+        $ python mp1.py [-t] [-p] config id
+
+You can read more about this if you run
+        $ python mp1.py -h
+
+but basically the -t flag is to use total ordering, config is path to the config file, and id is the current process's id.
+
+
+
+I've split up this MP into several modules.
+
+mp1_types       contains my primitive data structures
+mp1_unicast     thread types that are spawned off to receive unicast messages
+mp1_multicast   thread types that are daemons for multicast/delivery, use unicast
+mp1             main event loop that takes user input or does send/receive events
+
+
+Server
+======
+This is a main event loop that uses the select system call to read from a socket and the keyboard.
+Reading from the socket triggers a unicast receive thread, and keyboard commands do either a unicast send or multicast depending on the command.
+
+Causal Ordering
+===============
+I use the algorithm from the multicast slides. I have a queue that gets incoming messages. I keep track of the vector timestamp in an array, and increment it when I send a message. I also keep a lookup table that maps process ID to index in the vector timestamp so that I know which index is for which process.
+When a message comes in, I signal the processor thread to wake up and see if any of the messages should get delivered. This is done with the V_j[k] <= V_i[k] for (k != j) and V_j[j] == V_i[j] + 1 comparison. I stop processing the queue if there is an iteration of the processing loop that doesn't change my vector timestamp
+
+Total Ordering
+===============
+I use the algorithm from the multicast slides. The lowest numbered process in the system is selected as the sequencer. When a process gets a message, it gets put in the main queue and then wakes up the processing thread. If the sequencer gets a message, it increments the sequence number and broadcasts a sequence message. When a process gets a sequence message, it puts it on the sequence message queue and wakes up the processing thread. When the processing thread is woken up, it looks for the sequence message corresponding to the latest sequence number (NOT the sequencer's number) and pulls it out of the queue, then pulls out the corresponding message from the message queue and delivers it. Finally, the latest sequence number is incremented. If the sequence number is unchanged after one iteration, the processor thread goes back to sleep.
